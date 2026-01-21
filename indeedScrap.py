@@ -3,6 +3,32 @@ import sys
 from bs4 import BeautifulSoup
 import json
 from urllib.parse import urlparse, parse_qs
+import builtins
+
+# Wrap built-in print to also append output to log.txt
+_orig_print = builtins.print
+def _print_and_log(*args, **kwargs):
+    sep = kwargs.get('sep', ' ')
+    end = kwargs.get('end', '\n')
+    # Build the message string
+    try:
+        msg = sep.join(str(a) for a in args) + end
+    except Exception:
+        # Fallback in case of non-stringable objects
+        msg = ' '.join(map(repr, args)) + end
+    # Print to stdout using original print
+    _orig_print(msg, end='')
+    # Append to log file
+    try:
+        with open('/data/log.txt', 'a', encoding='utf-8') as lf:
+            lf.write(msg)
+    except Exception:
+        # If logging fails, still continue silently
+        pass
+
+# Override builtins.print so all prints go through our logger
+builtins.print = _print_and_log
+
 
 session = curl_cffi.Session(
     impersonate="chrome131_android"
