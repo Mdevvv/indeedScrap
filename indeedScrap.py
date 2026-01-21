@@ -202,9 +202,8 @@ else:
         time.sleep(2)
 
     # Write combined JSON
-    with open('jobs_all.json', 'w', encoding='utf-8') as jf:
+    with open('/data/jobs_all.json', 'w', encoding='utf-8') as jf:
         json.dump(jobs_data, jf, ensure_ascii=False, indent=2)
 
-    print(f'Wrote {len(jobs_data)} jobs to jobs_all.json')
-
+    print(f'Wrote {len(jobs_data)} jobs to /data/jobs_all.json')
 
