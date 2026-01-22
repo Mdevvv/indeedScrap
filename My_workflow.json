@@ -1,0 +1,88 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "command": "=python3 /data/indeedScrap.py \"{{ $json.keyWord }}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ],
+      "id": "d0273f69-38e6-4f55-b0ae-614b58552d01",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/jobs_all.json",
+        "options": {
+          "mimeType": "application/json"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        464,
+        0
+      ],
+      "id": "ef21a437-1b66-4049-a024-cdb6815289fb",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6acf08e4-7a50-41ab-8c84-58c46af8b519",
+      "name": "When clicking ‘Execute workflow’"
+    }
+  ],
+  "pinData": {
+    "When clicking ‘Execute workflow’": [
+      {
+        "json": {
+          "keyWord": "informatique"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "507cc986-a7da-4ec8-ba71-dd752cc60e23",
+  "meta": {
+    "instanceId": "a8b558a1fa04d8f74fc7f1c2fc79be3ddf73f361e7536adf3f7b2e71614ceb5e"
+  },
+  "id": "dzmnkZ4hHAyNodL9",
+  "tags": []
+}
