@@ -1,209 +1,174 @@
-import curl_cffi, requests, time
-import sys
-from bs4 import BeautifulSoup
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Web scraper for Indeed job listings
+"""
+
 import json
-from urllib.parse import urlparse, parse_qs
-import builtins
+import sys
+import requests
+from pathlib import Path
+from bs4 import BeautifulSoup
+import logging
+import time
+import io
 
-# Wrap built-in print to also append output to log.txt
-_orig_print = builtins.print
-def _print_and_log(*args, **kwargs):
-    sep = kwargs.get('sep', ' ')
-    end = kwargs.get('end', '\n')
-    # Build the message string
-    try:
-        msg = sep.join(str(a) for a in args) + end
-    except Exception:
-        # Fallback in case of non-stringable objects
-        msg = ' '.join(map(repr, args)) + end
-    # Print to stdout using original print
-    _orig_print(msg, end='')
-    # Append to log file
-    try:
-        with open('/data/log.txt', 'a', encoding='utf-8') as lf:
-            lf.write(msg)
-    except Exception:
-        # If logging fails, still continue silently
-        pass
+# Force UTF-8 encoding on Windows
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-# Override builtins.print so all prints go through our logger
-builtins.print = _print_and_log
+# Setup logging
+log_dir = Path(__file__).parent
+log_file = log_dir / 'scraper.log'
 
-
-session = curl_cffi.Session(
-    impersonate="chrome131_android"
+logging.basicConfig(
+    filename=log_file,
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-def fetch_url(url, save_path=None, allow_404=False):
-    """Fetch URL with retries. If allow_404 is True, return on 404 (do not retry).
-    If save_path is provided, save response content only for successful (2xx) responses.
+JOBS_FILE = log_dir / "jobs_all.json"
+INDEED_URL = "https://www.indeed.com/jobs"
+
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+def scrape_jobs(keyword: str, location: str = "Paris", num_pages: int = 1) -> list[dict]:
     """
-    while True:
-        resp = session.get(url)
-        code = resp.status_code
-        if code // 100 == 2:
-            break
-        if allow_404 and code == 404:
-            print(f"Received 404 for {url}, skipping as requested")
-            break
-        print(f"Received non-200 status code: {code}, retrying...")
-        time.sleep(5)
-
-    print(resp.status_code)
-    # Do not write any HTML files to disk here (avoid creating .html files)
-    return resp
-
-if len(sys.argv) > 1 and sys.argv[1].strip():
-    keyword = sys.argv[1]
-else:
-    keyword = "java dev"
-
-keyword_encoded = requests.utils.quote(keyword)
-
-url = f"https://fr.indeed.com/jobs?q={keyword_encoded}&l=Paris&radius=25"
-
-print(f"Fetching URL: {url}")
-
-resp = fetch_url(url)
-
-# Extract titles and jk from the saved HTML
-
-
-soup = BeautifulSoup(resp.content, 'html.parser')
-results = []
-
-job_cards = soup.find_all('a', {'data-jk': True})
-
-for card in job_cards:
-    jk = card.get('data-jk')
-    title = card.get_text(strip=True)
-    if title:  # Only add if title exists
-        results.append({'title': title, 'jk': jk})
-
-if not results:
-    print("No job cards with `data-jk` found.")
-else:
-    jobs_data = []
-    for idx, job in enumerate(results, start=1):
-        jk = job['jk']
-        view_url = f"https://fr.indeed.com/m/viewjob?jk={jk}"
-        print(f"({idx}/{len(results)}) Fetching: {view_url}")
-
-        # Save each job HTML to a separate file and get the response
-        resp_job = fetch_url(view_url, save_path=f"job_{jk}.html", allow_404=True)
-
-        # If not successful (including 404), skip parsing this job
-        if resp_job.status_code // 100 != 2:
-            print(f"Skipping jk={jk} due to status {resp_job.status_code}")
-            continue
-
-        # Parse the job HTML
-        soup_job = BeautifulSoup(resp_job.content, 'html.parser')
-
-        title_text = (soup_job.title.string or '').strip() if soup_job.title else ''
-        parts = [p.strip() for p in title_text.split(' - ')]
-        job_title = parts[0] if parts else ''
-        location = parts[1] if len(parts) >= 2 else ''
-
-        # JK and canonical
-        jk_val = None
-        canonical = ''
-        can = soup_job.find('link', rel='canonical')
-        if can and can.get('href'):
-            canonical = can.get('href')
-            qs = parse_qs(urlparse(canonical).query)
-            jk_val = qs.get('jk', [None])[0]
-        if not jk_val:
-            share_meta = soup_job.find('meta', id='indeed-share-url')
-            if share_meta and share_meta.get('content'):
-                canonical = share_meta.get('content')
-                qs = parse_qs(urlparse(canonical).query)
-                jk_val = qs.get('jk', [None])[0]
-
-        og_desc = soup_job.find('meta', property='og:description')
-        company = og_desc.get('content').strip() if og_desc and og_desc.get('content') else None
-
-        body_text = ' '.join([p.get_text(' ', strip=True) for p in soup_job.find_all('p')])
-
-        contract = None
-        for token in ['CDI', 'CDD', 'Freelance', 'Stage', 'Intérim', 'Alternance']:
-            if token in body_text:
-                contract = token
-                break
-
-        # Enhanced description extraction:
-        # 1) Try LD+JSON description
-        # 2) Look for common IDs/classes/attributes containing 'job' and 'desc'
-        # 3) Look for itemprop=description or role=main
-        # 4) Fallback: join all <p> or body text
-        desc = ''
-
-        # 1) LD+JSON
-        ld_json_desc = None
-        for script_tag in soup_job.find_all('script', type='application/ld+json'):
+    Scrape job listings from Indeed
+    """
+    jobs = []
+    
+    try:
+        for page in range(num_pages):
+            start = page * 10
+            params = {
+                "q": keyword,
+                "l": location,
+                "start": start,
+                "limit": 10
+            }
+            
+            headers = {"User-Agent": USER_AGENT}
+            
+            logging.info(f"Fetching page {page + 1} for keyword '{keyword}'")
+            
             try:
-                ld = json.loads(script_tag.string or '{}')
-                if isinstance(ld, dict) and ld.get('description'):
-                    ld_json_desc = ld.get('description')
-                    break
-                # sometimes it's a list
-                if isinstance(ld, list):
-                    for item in ld:
-                        if isinstance(item, dict) and item.get('description'):
-                            ld_json_desc = item.get('description')
-                            break
-                    if ld_json_desc:
-                        break
-            except Exception:
-                continue
-        if ld_json_desc:
-            desc = ld_json_desc.strip()
-        else:
-            # 2) heuristic selectors
-            selectors = [
-                '#jobDescriptionText',
-                '[id*=job][id*=desc]',
-                '[class*=job][class*=desc]',
-                'div[itemprop=description]',
-                'div[data-tn-component="jobDescription"]',
-                '[role=main]',
-                'main',
-            ]
-            main_node = None
-            for sel in selectors:
-                node = soup_job.select_one(sel)
-                if node and node.get_text(strip=True):
-                    main_node = node
-                    break
-            if main_node:
-                desc = main_node.get_text('\n', strip=True)
-            else:
-                # 4) fallback: join all paragraphs; if none, use body text
-                paras = [p.get_text(' ', strip=True) for p in soup_job.find_all('p') if p.get_text(strip=True)]
-                if paras:
-                    desc = '\n\n'.join(paras)
-                else:
-                    body = soup_job.body.get_text(' ', strip=True) if soup_job.body else ''
-                    desc = body
+                response = requests.get(
+                    INDEED_URL,
+                    params=params,
+                    headers=headers,
+                    timeout=10
+                )
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Parse job listings
+                job_cards = soup.find_all('div', class_='job_seen_beacon')
+                
+                if not job_cards:
+                    # Try alternative selector
+                    job_cards = soup.find_all('div', {'data-testid': 'job-card'})
+                
+                for card in job_cards:
+                    try:
+                        # Extract job title
+                        title_elem = card.find('h2', class_='jobTitle')
+                        if not title_elem:
+                            title_elem = card.find('span', {'class': lambda x: x and 'jobTitle' in x})
+                        job_title = title_elem.get_text(strip=True) if title_elem else "N/A"
+                        
+                        # Extract company
+                        company_elem = card.find('span', class_='companyName')
+                        company = company_elem.get_text(strip=True) if company_elem else "N/A"
+                        
+                        # Extract location
+                        location_elem = card.find('div', class_='companyLocation')
+                        job_location = location_elem.get_text(strip=True) if location_elem else location
+                        
+                        # Extract salary (if available)
+                        salary_elem = card.find('span', class_='salary-snippet')
+                        salary = salary_elem.get_text(strip=True) if salary_elem else "Non spécifié"
+                        
+                        # Extract contract type
+                        contract_elem = card.find('div', {'class': lambda x: x and 'contract-type' in x})
+                        contract = contract_elem.get_text(strip=True) if contract_elem else "Non spécifié"
+                        
+                        # Extract job description snippet
+                        desc_elem = card.find('div', class_='job-snippet')
+                        description = desc_elem.get_text(strip=True) if desc_elem else "N/A"
+                        
+                        # Extract job URL
+                        link_elem = card.find('a', class_='jcs-JobTitle')
+                        if not link_elem:
+                            link_elem = card.find('a', {'data-testid': 'job-link'})
+                        job_url = link_elem.get('href', '#') if link_elem else "#"
+                        if not job_url.startswith('http'):
+                            job_url = f"https://www.indeed.com{job_url}"
+                        
+                        job = {
+                            "job_title": job_title,
+                            "company": company,
+                            "location": job_location,
+                            "salary": salary,
+                            "contract": contract,
+                            "description": description,
+                            "url": job_url,
+                            "keyword": keyword
+                        }
+                        
+                        jobs.append(job)
+                        logging.info(f"Scraped: {job_title} at {company}")
+                    
+                    except Exception as e:
+                        logging.warning(f"Error parsing job card: {e}")
+                        continue
+                
+                # Rate limiting
+                time.sleep(2)
+            
+            except requests.RequestException as e:
+                logging.error(f"Request error: {e}")
+                break
+    
+    except Exception as e:
+        logging.error(f"Scraping error: {e}")
+    
+    return jobs
 
-        data = {
-            'title': title_text,
-            'job_title': job_title,
-            'jk': jk_val or jk,
-            'company': company,
-            'location': location,
-            'canonical': view_url.replace('/m/viewjob', '/viewjob'),
-            'contract': contract,
-            'description': desc,
-        }
-        jobs_data.append(data)
 
-        # Sleep between requests
-        time.sleep(2)
+def save_jobs(jobs: list[dict]):
+    """Save jobs to JSON file"""
+    try:
+        with open(JOBS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(jobs, f, indent=2, ensure_ascii=False)
+        logging.info(f"Saved {len(jobs)} jobs to {JOBS_FILE}")
+    except Exception as e:
+        logging.error(f"Error saving jobs: {e}")
 
-    # Write combined JSON
-    with open('/data/jobs_all.json', 'w', encoding='utf-8') as jf:
-        json.dump(jobs_data, jf, ensure_ascii=False, indent=2)
 
-    print(f'Wrote {len(jobs_data)} jobs to /data/jobs_all.json')
+def main():
+    """Main entry point"""
+    if len(sys.argv) < 2:
+        keyword = "Python Developer"
+    else:
+        keyword = sys.argv[1]
+    
+    location = sys.argv[2] if len(sys.argv) > 2 else "Paris"
+    
+    logging.info(f"Starting scraper for '{keyword}' in '{location}'")
+    
+    jobs = scrape_jobs(keyword, location, num_pages=2)
+    
+    if jobs:
+        save_jobs(jobs)
+        print(f"✅ {len(jobs)} jobs scraped and saved")
+    else:
+        print(f"⚠️ No jobs found for '{keyword}' in '{location}'")
+    
+    return len(jobs)
 
+
+if __name__ == "__main__":
+    main()

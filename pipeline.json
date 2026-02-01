@@ -1,0 +1,163 @@
+{
+  "name": "Job Automation with MCP Client",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        5584,
+        2512
+      ],
+      "id": "60c3835c-461e-481a-93b9-c7f9a506ae07",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "keyword",
+              "type": "string",
+              "value": "Java"
+            },
+            {
+              "id": "a2",
+              "name": "location",
+              "type": "string",
+              "value": "Paris"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fa6ccca4-5a57-441d-ae0b-df62288e76b7",
+      "name": "Set Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5792,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://127.0.0.1:8001/mcp",
+        "tool": {
+          "__rl": true,
+          "mode": "list",
+          "value": "search_jobs"
+        },
+        "parameters": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "keyword": "={{ $json.keyword }}",
+            "location": "={{ $json.location }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "keyword",
+              "displayName": "keyword",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1,
+      "position": [
+        5984,
+        2512
+      ],
+      "id": "b6362cc5-71a7-4fce-9f16-8842cecb98f6",
+      "name": "MCP Client - Scraper"
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://127.0.0.1:8001/mcp",
+        "tool": {
+          "__rl": true,
+          "mode": "list",
+          "value": "get_jobs_summary"
+        },
+        "parameters": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1,
+      "position": [
+        6176,
+        2512
+      ],
+      "id": "c7473dd6-82b8-452f-9e17-9953dcf99d1c",
+      "name": "MCP Client - IA Summary"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Set Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Data": {
+      "main": [
+        [
+          {
+            "node": "MCP Client - Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Client - Scraper": {
+      "main": [
+        [
+          {
+            "node": "MCP Client - IA Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "f257c056-ad2d-48f5-8d04-9ae8bb056559",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "44f39889d28b80b86c1ff118fabb0f194f6a339c21c839ad8cc7e764f77ad829"
+  },
+  "id": "8ISYD1Uc28cCkA8h-4AFH",
+  "tags": []
+}
