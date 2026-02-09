@@ -1,146 +1,120 @@
 {
-  "name": "Job Automation with MCP Client",
+  "name": "Job Search Workflow",
   "nodes": [
     {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Tu es un agent automatisé de recrutement connecté à une base de données via MCP.\n\nMODE OUTILLÉ OBLIGATOIRE — TU N’ES PAS UN SIMPLE CHATBOT.\n\nRÈGLE CRITIQUE :\nTu dois TOUJOURS utiliser les outils MCP pour répondre.\nTu ne dois JAMAIS demander manuellement des informations déjà fournies.\n\nINTERPRÉTATION UTILISATEUR :\n- Le dernier message utilisateur contient le NOM du profil à analyser.\n- Utilise ce nom DIRECTEMENT avec get_user_profile.\n- Ne redemande JAMAIS le nom.\n\nPROCÉDURE STRICTE :\n\n1. Prends le dernier message utilisateur comme nom du profil.\n2. Appelle IMMÉDIATEMENT get_user_profile avec ce nom.\n3. Analyse :\n   - skills_json\n   - experience\n   - education\n   - languages_json\n   - interests_json\n4. Identifie toutes les compétences et domaines métiers.\n5. Pour CHAQUE compétence ou domaine :\n   - Appelle search_jobs\n   - Utilise la localisation du profil\n6. Déduplique et classe les offres par pertinence.\n7. Justifie chaque recommandation.\n\nSI get_user_profile ne retourne aucun résultat :\n- Indique que le profil n’existe pas dans la base\n- Ne demande pas de reformuler inutilement\n\nFORMAT STRICT :\n\n=== PROFIL ANALYSÉ ===\nRésumé structuré\n\n=== COMPÉTENCES & DOMAINES ===\nListe complète\n\n=== OFFRES RECOMMANDÉES ===\nClassement + justification\n\n=== CONSEILS CARRIÈRE ===\nConseils concrets\n\nINTERDICTIONS :\n- Ne pas poser de questions inutiles\n- Ne pas ignorer MCP\n- Ne pas simuler de données\n- Ne pas fonctionner sans outils\n\nextrait le user depuis cette phrase :\n\"{{ $json.chatInput }}\"",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        5200,
+        2224
+      ],
+      "id": "00de3595-826f-4be3-9d78-f89635d8da6b",
+      "name": "AI Agent (Analysis)"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        5200,
+        2448
+      ],
+      "id": "d3126bfe-2b0c-43f2-9302-10d72fa41386",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "LRY5PutX7Tg5qn2Q",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
       "parameters": {},
-      "type": "n8n-nodes-base.manualTrigger",
+      "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        5584,
-        2512
+        5568,
+        2224
       ],
-      "id": "60c3835c-461e-481a-93b9-c7f9a506ae07",
-      "name": "When clicking 'Execute workflow'"
+      "id": "a389d2ae-9d5f-4d3c-bebd-937288f85ae0",
+      "name": "Final Result"
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "a1",
-              "name": "keyword",
-              "type": "string",
-              "value": "Java"
-            },
-            {
-              "id": "a2",
-              "name": "location",
-              "type": "string",
-              "value": "Paris"
-            }
-          ]
-        },
+        "endpointUrl": "http://127.0.0.1:8000/mcp",
         "options": {}
       },
-      "id": "fa6ccca4-5a57-441d-ae0b-df62288e76b7",
-      "name": "Set Data",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
       "position": [
-        5792,
-        2512
-      ]
+        5344,
+        2448
+      ],
+      "id": "772d8c11-9d0b-4cfe-a9d1-f054fef93339",
+      "name": "MCP Client"
     },
     {
       "parameters": {
-        "endpointUrl": "http://127.0.0.1:8001/mcp",
-        "tool": {
-          "__rl": true,
-          "mode": "list",
-          "value": "search_jobs"
-        },
-        "parameters": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "keyword": "={{ $json.keyword }}",
-            "location": "={{ $json.location }}"
-          },
-          "matchingColumns": [],
-          "schema": [
-            {
-              "id": "keyword",
-              "displayName": "keyword",
-              "required": false,
-              "type": "string"
-            },
-            {
-              "id": "location",
-              "displayName": "location",
-              "required": false,
-              "type": "string"
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
         "options": {}
       },
-      "type": "@n8n/n8n-nodes-langchain.mcpClient",
-      "typeVersion": 1,
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
       "position": [
-        5984,
-        2512
+        5008,
+        2224
       ],
-      "id": "b6362cc5-71a7-4fce-9f16-8842cecb98f6",
-      "name": "MCP Client - Scraper"
-    },
-    {
-      "parameters": {
-        "endpointUrl": "http://127.0.0.1:8001/mcp",
-        "tool": {
-          "__rl": true,
-          "mode": "list",
-          "value": "get_jobs_summary"
-        },
-        "parameters": {
-          "mappingMode": "defineBelow",
-          "value": {},
-          "matchingColumns": [],
-          "schema": [],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.mcpClient",
-      "typeVersion": 1,
-      "position": [
-        6176,
-        2512
-      ],
-      "id": "c7473dd6-82b8-452f-9e17-9953dcf99d1c",
-      "name": "MCP Client - IA Summary"
+      "id": "d58a1526-0cb1-4431-9bd1-a6741942b967",
+      "name": "When chat message received",
+      "webhookId": "a5582ef0-2d3b-4e29-ad8b-238e1fe019f8"
     }
   ],
   "pinData": {},
   "connections": {
-    "When clicking 'Execute workflow'": {
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent (Analysis)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Analysis)": {
       "main": [
         [
           {
-            "node": "Set Data",
+            "node": "Final Result",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Set Data": {
-      "main": [
+    "MCP Client": {
+      "ai_tool": [
         [
           {
-            "node": "MCP Client - Scraper",
-            "type": "main",
+            "node": "AI Agent (Analysis)",
+            "type": "ai_tool",
             "index": 0
           }
         ]
       ]
     },
-    "MCP Client - Scraper": {
+    "When chat message received": {
       "main": [
         [
           {
-            "node": "MCP Client - IA Summary",
+            "node": "AI Agent (Analysis)",
             "type": "main",
             "index": 0
           }
@@ -153,7 +127,7 @@
     "executionOrder": "v1",
     "availableInMCP": false
   },
-  "versionId": "f257c056-ad2d-48f5-8d04-9ae8bb056559",
+  "versionId": "8884b5b7-e38c-4653-a4b9-a5859736209a",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "44f39889d28b80b86c1ff118fabb0f194f6a339c21c839ad8cc7e764f77ad829"
